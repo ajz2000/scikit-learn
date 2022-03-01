@@ -340,7 +340,12 @@ class _VectorizerMixin:
                 'Invalid value for "strip_accents": %s' % self.strip_accents
             )
 
-        return partial(_preprocess, accent_function=strip_accents, lower=self.lowercase, lower_first=self.lower_first)
+        return partial(
+            _preprocess,
+            accent_function=strip_accents,
+            lower=self.lowercase,
+            lower_first=self.lower_first
+        )
 
     def build_tokenizer(self):
         """Return a function that splits a string into a sequence of tokens.
@@ -634,7 +639,7 @@ class HashingVectorizer(TransformerMixin, _VectorizerMixin, BaseEstimator):
 
     lowercase : bool, default=True
         Convert all characters to lowercase before tokenizing.
-    
+
     lower_first: bool, default=False
         Convert characters to lowercase before stripping accents during preprocessing. 
         If True, some of the resulting stripped tokens may be capitalized.
@@ -940,7 +945,7 @@ class CountVectorizer(_VectorizerMixin, BaseEstimator):
 
     lowercase : bool, default=True
         Convert all characters to lowercase before tokenizing.
-    
+
     lower_first : bool, default=False
         Convert characters to lowercase before stripping accents during preprocessing. 
         If True, some of the resulting stripped tokens may be capitalized.
