@@ -48,7 +48,7 @@ __all__ = [
 ]
 
 
-def _preprocess(doc, accent_function=None, lower=False):
+def _preprocess(doc, accent_function=None, lower=False, lower_first=False):
     """Chain together an optional series of text preprocessing steps to
     apply to a document.
 
@@ -61,16 +61,21 @@ def _preprocess(doc, accent_function=None, lower=False):
         normalizing and removing.
     lower: bool, default=False
         Whether to use str.lower to lowercase all of the text
+    lower_first: bool, default=False
+        Determines whether the text is converted to lowercase 
+        before (legacy behaviour) or after accent_function.
 
     Returns
     -------
     doc: str
         preprocessed string
     """
-    if lower:
+    if lower and lower_first:
         doc = doc.lower()
     if accent_function is not None:
         doc = accent_function(doc)
+    if lower and not lower_first:
+        doc = doc.lower()
     return doc
 
 
@@ -335,7 +340,12 @@ class _VectorizerMixin:
                 'Invalid value for "strip_accents": %s' % self.strip_accents
             )
 
-        return partial(_preprocess, accent_function=strip_accents, lower=self.lowercase)
+        return partial(
+            _preprocess,
+            accent_function=strip_accents,
+            lower=self.lowercase,
+            lower_first=self.lower_first
+        )
 
     def build_tokenizer(self):
         """Return a function that splits a string into a sequence of tokens.
@@ -630,6 +640,10 @@ class HashingVectorizer(TransformerMixin, _VectorizerMixin, BaseEstimator):
     lowercase : bool, default=True
         Convert all characters to lowercase before tokenizing.
 
+    lower_first: bool, default=False
+        Convert characters to lowercase before stripping accents during preprocessing. 
+        If True, some of the resulting stripped tokens may be capitalized.
+
     preprocessor : callable, default=None
         Override the preprocessing (string transformation) stage while
         preserving the tokenizing and n-grams generation steps.
@@ -733,6 +747,7 @@ class HashingVectorizer(TransformerMixin, _VectorizerMixin, BaseEstimator):
         decode_error="strict",
         strip_accents=None,
         lowercase=True,
+        lower_first=False,
         preprocessor=None,
         tokenizer=None,
         stop_words=None,
@@ -753,6 +768,7 @@ class HashingVectorizer(TransformerMixin, _VectorizerMixin, BaseEstimator):
         self.tokenizer = tokenizer
         self.analyzer = analyzer
         self.lowercase = lowercase
+        self.lower_first = lower_first
         self.token_pattern = token_pattern
         self.stop_words = stop_words
         self.n_features = n_features
@@ -930,6 +946,10 @@ class CountVectorizer(_VectorizerMixin, BaseEstimator):
     lowercase : bool, default=True
         Convert all characters to lowercase before tokenizing.
 
+    lower_first : bool, default=False
+        Convert characters to lowercase before stripping accents during preprocessing. 
+        If True, some of the resulting stripped tokens may be capitalized.
+
     preprocessor : callable, default=None
         Override the preprocessing (strip_accents and lowercase) stage while
         preserving the tokenizing and n-grams generation steps.
@@ -1095,6 +1115,7 @@ class CountVectorizer(_VectorizerMixin, BaseEstimator):
         decode_error="strict",
         strip_accents=None,
         lowercase=True,
+        lower_first=False,
         preprocessor=None,
         tokenizer=None,
         stop_words=None,
@@ -1116,6 +1137,7 @@ class CountVectorizer(_VectorizerMixin, BaseEstimator):
         self.tokenizer = tokenizer
         self.analyzer = analyzer
         self.lowercase = lowercase
+        self.lower_first = lower_first
         self.token_pattern = token_pattern
         self.stop_words = stop_words
         self.max_df = max_df
