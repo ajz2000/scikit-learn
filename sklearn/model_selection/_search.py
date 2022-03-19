@@ -302,35 +302,44 @@ class ParameterSampler:
         if self.without_replacement:
             # if all distributions are given as lists, we want to sample without
             # replacement
-            if self._is_all_lists():
-                # look up sampled parameter settings in parameter grid
-                param_grid = ParameterGrid(self.param_distributions)
-                grid_size = len(param_grid)
-                n_iter = self.n_iter
 
-                if grid_size < n_iter:
-                    warnings.warn(
-                        "The total space of parameters %d is smaller "
-                        "than n_iter=%d. Running %d iterations. For exhaustive "
-                        "searches, use GridSearchCV." % (grid_size, self.n_iter, grid_size),
-                        UserWarning,
-                    )
-                    n_iter = grid_size
-                for i in sample_without_replacement(grid_size, n_iter, random_state=rng):
-                    yield param_grid[i]
+            # look up sampled parameter settings in parameter grid
+            param_grid = ParameterGrid([{key: value for key, value in dist.items() if not hasattr(value, "rvs")} for dist in self.param_distributions])
+            grid_size = len(param_grid)
+            n_iter = self.n_iter
 
-            else:
-                for _ in range(self.n_iter):
-                    dist = rng.choice(self.param_distributions)
-                    # Always sort the keys of a dictionary, for reproducibility
-                    items = sorted(dist.items())
-                    params = dict()
-                    for k, v in items:
-                        if hasattr(v, "rvs"):
-                            params[k] = v.rvs(random_state=rng)
-                        else:
-                            params[k] = v[rng.randint(len(v))]
-                    yield params
+            if grid_size < n_iter:
+                warnings.warn(
+                    "The total space of parameters %d is smaller "
+                    "than n_iter=%d. Running %d iterations. For exhaustive "
+                    "searches, use GridSearchCV." % (grid_size, self.n_iter, grid_size),
+                    UserWarning,
+                )
+            n_iter = grid_size
+            param_grids = []
+            for dist in self.param_distributions:
+                grid = ParameterGrid({key: value for key, value in dist.items() if not hasattr(value, "rvs")})
+                param_grids_sample_iter = iter(rng.permutation(sample_without_replacement(len(grid), min(len(grid), n_iter), random_state=rng)))
+                try:  
+                    param_grid_item = { "grid": grid, "sample": param_grids_sample_iter, "next": next(param_grids_sample_iter) }
+                    param_grids.append(param_grid_item)
+                except StopIteration:
+                    pass
+
+            for _ in range(self.n_iter):
+                dist_grid = rng.choice(param_grids)
+                # Always sort the keys of a dictionary, for reproducibility
+                params = dict(dist_grid["grid"][dist_grid["next"]])
+                items = sorted(dist.items())
+                for k, v in items:
+                    if hasattr(v, "rvs"):
+                        params[k] = v.rvs(random_state=rng)
+                params = dict(sorted(params.items()))
+                try:
+                    dist_grid["next"] = next(dist_grid["sample"])
+                except StopIteration:
+                    param_grids.remove(dist_grid)
+                yield params
         else:
             for _ in range(self.n_iter):
                 dist = rng.choice(self.param_distributions)
