@@ -301,7 +301,7 @@ class ParameterSampler:
 
     def __iter__(self):
         rng = check_random_state(self.random_state)
-
+        
         if self._is_all_lists() and self.without_replacement:
             # if all distributions are given as lists, we want to
             # sample without replacement
@@ -324,8 +324,11 @@ class ParameterSampler:
             id = 0
             for dist in self.param_distributions:
                 grid = ParameterGrid(dist)
-                param_grids_sample_iter = iter(sample_without_replacement(
-                    len(grid), min(len(grid), n_iter), random_state=rng))
+                sample = sample_without_replacement(
+                    len(grid), min(len(grid), n_iter), random_state=rng)
+                if (n_iter != grid_size):
+                    sample = rng.permutation(sample)
+                param_grids_sample_iter = iter(sample)
                 try:
                     param_grid_item = {
                         "grid": grid,
