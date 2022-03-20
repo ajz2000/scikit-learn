@@ -205,8 +205,9 @@ class ParameterSampler:
 
     Non-deterministic iterable over random candidate combinations for hyper-
     parameter search. If all parameters are presented as a list,
-    sampling without replacement is performed. If at least one parameter
-    is given as a distribution, sampling with replacement is used.
+    sampling without replacement is performed, unless specified in the
+    `without_replacement` parameter. If at least one parameter is given as a
+    distribution, sampling with replacement is used.
     It is highly recommended to use continuous distributions for continuous
     parameters.
 
@@ -234,6 +235,8 @@ class ParameterSampler:
 
     without_replacement: bool, default=True
         Whether or not sampling without replacement should be used.
+        Note: sampling without replacement is only applicable to parameters
+        whose distributions are discrete (ie. given as lists).
 
     Returns
     -------
@@ -1423,7 +1426,8 @@ class RandomizedSearchCV(BaseSearchCV):
     given by n_iter.
 
     If all parameters are presented as a list,
-    sampling without replacement is performed. If at least one parameter
+    sampling without replacement is performed, unless specified otherwise in
+    `without_replacement` parameter. If at least one parameter
     is given as a distribution, sampling with replacement is used.
     It is highly recommended to use continuous distributions for continuous
     parameters.
@@ -1579,9 +1583,11 @@ class RandomizedSearchCV(BaseSearchCV):
             Default value was changed from ``True`` to ``False``
 
     without_replacement: bool, default=True
-        If ``False``, then ``_is_all_lists`` is ignored in ``ParameterSampler``.
-        Sampling with replacement is used, regardless of whether or not every value
-        in each dict of param_distributions is a list.
+        If ``True``, then sampling without replacement is used only if every
+        distribution is provided as a list.
+        If ``False``, then sampling with replacement is used,
+        regardless of whether or not every value in each dict of param_distributions
+        is a list.
 
     Attributes
     ----------
