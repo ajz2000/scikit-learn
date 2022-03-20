@@ -303,11 +303,11 @@ class ParameterSampler:
         rng = check_random_state(self.random_state)
 
         if self._is_all_lists() and self.without_replacement:
-            # if all distributions are given as lists, we want to sample without
-            # replacement
+            # if all distributions are given as lists, we want to
+            # sample without replacement
 
             # look up sampled parameter settings in parameter grid
-            param_grid = ParameterGrid([{key: value for key, value in dist.items()} for dist in self.param_distributions])
+            param_grid = ParameterGrid(self.param_distributions)
             grid_size = len(param_grid)
             n_iter = self.n_iter
 
@@ -315,17 +315,24 @@ class ParameterSampler:
                 warnings.warn(
                     "The total space of parameters %d is smaller "
                     "than n_iter=%d. Running %d iterations. For exhaustive "
-                    "searches, use GridSearchCV." % (grid_size, self.n_iter, grid_size),
+                    "searches, use GridSearchCV." %
+                    (grid_size, self.n_iter, grid_size),
                     UserWarning,
                 )
                 n_iter = grid_size
             param_grids = []
             id = 0
             for dist in self.param_distributions:
-                grid = ParameterGrid({key: value for key, value in dist.items()})
-                param_grids_sample_iter = iter(sample_without_replacement(len(grid), min(len(grid), n_iter), random_state=rng))
-                try:  
-                    param_grid_item = { "grid": grid, "sample": param_grids_sample_iter, "next": next(param_grids_sample_iter), "id": id }
+                grid = ParameterGrid(dist)
+                param_grids_sample_iter = iter(sample_without_replacement(
+                    len(grid), min(len(grid), n_iter), random_state=rng))
+                try:
+                    param_grid_item = {
+                        "grid": grid,
+                        "sample": param_grids_sample_iter,
+                        "next": next(param_grids_sample_iter),
+                        "id": id
+                    }
                     param_grids.append(param_grid_item)
                 except StopIteration:
                     pass
@@ -333,10 +340,16 @@ class ParameterSampler:
 
             for _ in range(n_iter):
                 dist_grid = rng.choice(param_grids)
+                # Retrieve parameter value combination at index
+                # `dist_grid["next"]` in parameter grid `dist_grid["grid"]`
+                index = dist_grid["next"]
+                unsorted_params = dict(dist_grid["grid"][index])
                 # Always sort the keys of a dictionary, for reproducibility
-                params = dict(dist_grid["grid"][dist_grid["next"]])
-                params = dict(sorted(params.items()))
+                params = dict(sorted(unsorted_params.items()))
                 try:
+                    # Set `dist_grid["next"]` to the next index to be sampled
+                    # in parameter grid `dist_grid["grid"]`, if this specific
+                    # dist_grid is selected again in a future iteration
                     dist_grid["next"] = next(dist_grid["sample"])
                 except StopIteration:
                     param_grids.remove(dist_grid)
@@ -1584,10 +1597,11 @@ class RandomizedSearchCV(BaseSearchCV):
 
     without_replacement: bool, default=True
         If ``True``, then sampling without replacement is used only if every
-        distribution is provided as a list.
+        distribution is provided as a list. If non-list distributions are
+        given, this parameter is ignored and sampling with replaced is used.
         If ``False``, then sampling with replacement is used,
-        regardless of whether or not every value in each dict of param_distributions
-        is a list.
+        regardless of whether or not every value in each dict of
+        param_distributions is a list.
 
     Attributes
     ----------
@@ -1775,7 +1789,7 @@ class RandomizedSearchCV(BaseSearchCV):
         self.param_distributions = param_distributions
         self.n_iter = n_iter
         self.random_state = random_state
-        self.without_replacement=without_replacement
+        self.without_replacement = without_replacement
         super().__init__(
             estimator=estimator,
             scoring=scoring,
@@ -1792,6 +1806,8 @@ class RandomizedSearchCV(BaseSearchCV):
         """Search n_iter candidates from param_distributions"""
         evaluate_candidates(
             ParameterSampler(
-                self.param_distributions, self.n_iter, random_state=self.random_state, without_replacement=self.without_replacement
+                self.param_distributions, self.n_iter,
+                random_state=self.random_state,
+                without_replacement=self.without_replacement
             )
         )
