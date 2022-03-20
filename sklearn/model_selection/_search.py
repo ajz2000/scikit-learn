@@ -205,8 +205,9 @@ class ParameterSampler:
 
     Non-deterministic iterable over random candidate combinations for hyper-
     parameter search. If all parameters are presented as a list,
-    sampling without replacement is performed. If at least one parameter
-    is given as a distribution, sampling with replacement is used.
+    sampling without replacement is performed, unless specified in the
+    `without_replacement` parameter. If at least one parameter is given as a
+    distribution, sampling with replacement is used.
     It is highly recommended to use continuous distributions for continuous
     parameters.
 
@@ -232,6 +233,11 @@ class ParameterSampler:
         function calls.
         See :term:`Glossary <random_state>`.
 
+    without_replacement: bool, default=True
+        Whether or not sampling without replacement should be used.
+        Note: sampling without replacement is only applicable to parameters
+        whose distributions are discrete (ie. given as lists).
+
     Returns
     -------
     params : dict of str to any
@@ -256,7 +262,7 @@ class ParameterSampler:
     True
     """
 
-    def __init__(self, param_distributions, n_iter, *, random_state=None):
+    def __init__(self, param_distributions, n_iter, *, random_state=None, without_replacement=True):
         if not isinstance(param_distributions, (Mapping, Iterable)):
             raise TypeError(
                 "Parameter distribution is not a dict or a list,"
@@ -285,6 +291,7 @@ class ParameterSampler:
         self.n_iter = n_iter
         self.random_state = random_state
         self.param_distributions = param_distributions
+        self.without_replacement = without_replacement
 
     def _is_all_lists(self):
         return all(
@@ -294,10 +301,11 @@ class ParameterSampler:
 
     def __iter__(self):
         rng = check_random_state(self.random_state)
+        
+        if self._is_all_lists() and self.without_replacement:
+            # if all distributions are given as lists, we want to
+            # sample without replacement
 
-        # if all distributions are given as lists, we want to sample without
-        # replacement
-        if self._is_all_lists():
             # look up sampled parameter settings in parameter grid
             param_grid = ParameterGrid(self.param_distributions)
             grid_size = len(param_grid)
@@ -307,13 +315,46 @@ class ParameterSampler:
                 warnings.warn(
                     "The total space of parameters %d is smaller "
                     "than n_iter=%d. Running %d iterations. For exhaustive "
-                    "searches, use GridSearchCV." % (grid_size, self.n_iter, grid_size),
+                    "searches, use GridSearchCV." %
+                    (grid_size, self.n_iter, grid_size),
                     UserWarning,
                 )
                 n_iter = grid_size
-            for i in sample_without_replacement(grid_size, n_iter, random_state=rng):
-                yield param_grid[i]
+            param_grids = []
+            id = 0
+            for dist in self.param_distributions:
+                grid = ParameterGrid(dist)
+                sample = sample_without_replacement(
+                    len(grid), min(len(grid), n_iter), random_state=rng)
+                if (n_iter != grid_size):
+                    sample = rng.permutation(sample)
+                param_grids_sample_iter = iter(sample)
+                try:
+                    param_grid_item = {
+                        "grid": grid,
+                        "sample": param_grids_sample_iter,
+                        "next": next(param_grids_sample_iter)
+                    }
+                    param_grids.append(param_grid_item)
+                except StopIteration:
+                    pass
 
+            for _ in range(n_iter):
+                dist_grid = rng.choice(param_grids)
+                # Retrieve parameter value combination at index
+                # `dist_grid["next"]` in parameter grid `dist_grid["grid"]`
+                index = dist_grid["next"]
+                unsorted_params = dict(dist_grid["grid"][index])
+                # Always sort the keys of a dictionary, for reproducibility
+                params = dict(sorted(unsorted_params.items()))
+                try:
+                    # Set `dist_grid["next"]` to the next index to be sampled
+                    # in parameter grid `dist_grid["grid"]`, if this specific
+                    # dist_grid is selected again in a future iteration
+                    dist_grid["next"] = next(dist_grid["sample"])
+                except StopIteration:
+                    param_grids.remove(dist_grid)
+                yield params
         else:
             for _ in range(self.n_iter):
                 dist = rng.choice(self.param_distributions)
@@ -1399,7 +1440,8 @@ class RandomizedSearchCV(BaseSearchCV):
     given by n_iter.
 
     If all parameters are presented as a list,
-    sampling without replacement is performed. If at least one parameter
+    sampling without replacement is performed, unless specified otherwise in
+    `without_replacement` parameter. If at least one parameter
     is given as a distribution, sampling with replacement is used.
     It is highly recommended to use continuous distributions for continuous
     parameters.
@@ -1553,6 +1595,14 @@ class RandomizedSearchCV(BaseSearchCV):
 
         .. versionchanged:: 0.21
             Default value was changed from ``True`` to ``False``
+
+    without_replacement: bool, default=True
+        If ``True``, then sampling without replacement is used only if every
+        distribution is provided as a list. If non-list distributions are
+        given, this parameter is ignored and sampling with replacement is used.
+        If ``False``, then sampling with replacement is used,
+        regardless of whether or not every value in each dict of
+        param_distributions is a list.
 
     Attributes
     ----------
@@ -1735,10 +1785,12 @@ class RandomizedSearchCV(BaseSearchCV):
         random_state=None,
         error_score=np.nan,
         return_train_score=False,
+        without_replacement=True,
     ):
         self.param_distributions = param_distributions
         self.n_iter = n_iter
         self.random_state = random_state
+        self.without_replacement = without_replacement
         super().__init__(
             estimator=estimator,
             scoring=scoring,
@@ -1755,6 +1807,8 @@ class RandomizedSearchCV(BaseSearchCV):
         """Search n_iter candidates from param_distributions"""
         evaluate_candidates(
             ParameterSampler(
-                self.param_distributions, self.n_iter, random_state=self.random_state
+                self.param_distributions, self.n_iter,
+                random_state=self.random_state,
+                without_replacement=self.without_replacement
             )
         )
