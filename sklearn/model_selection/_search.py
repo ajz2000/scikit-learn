@@ -333,13 +333,11 @@ class ParameterSampler:
                     param_grid_item = {
                         "grid": grid,
                         "sample": param_grids_sample_iter,
-                        "next": next(param_grids_sample_iter),
-                        "id": id
+                        "next": next(param_grids_sample_iter)
                     }
                     param_grids.append(param_grid_item)
                 except StopIteration:
                     pass
-                id += 1
 
             for _ in range(n_iter):
                 dist_grid = rng.choice(param_grids)
