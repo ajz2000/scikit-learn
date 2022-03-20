@@ -299,12 +299,12 @@ class ParameterSampler:
     def __iter__(self):
         rng = check_random_state(self.random_state)
 
-        if self.without_replacement:
+        if self._is_all_lists() and self.without_replacement:
             # if all distributions are given as lists, we want to sample without
             # replacement
 
             # look up sampled parameter settings in parameter grid
-            param_grid = ParameterGrid([{key: value for key, value in dist.items() if not hasattr(value, "rvs")} for dist in self.param_distributions])
+            param_grid = ParameterGrid([{key: value for key, value in dist.items()} for dist in self.param_distributions])
             grid_size = len(param_grid)
             n_iter = self.n_iter
 
@@ -315,25 +315,23 @@ class ParameterSampler:
                     "searches, use GridSearchCV." % (grid_size, self.n_iter, grid_size),
                     UserWarning,
                 )
-            n_iter = grid_size
+                n_iter = grid_size
             param_grids = []
+            id = 0
             for dist in self.param_distributions:
-                grid = ParameterGrid({key: value for key, value in dist.items() if not hasattr(value, "rvs")})
-                param_grids_sample_iter = iter(rng.permutation(sample_without_replacement(len(grid), min(len(grid), n_iter), random_state=rng)))
+                grid = ParameterGrid({key: value for key, value in dist.items()})
+                param_grids_sample_iter = iter(sample_without_replacement(len(grid), min(len(grid), n_iter), random_state=rng))
                 try:  
-                    param_grid_item = { "grid": grid, "sample": param_grids_sample_iter, "next": next(param_grids_sample_iter) }
+                    param_grid_item = { "grid": grid, "sample": param_grids_sample_iter, "next": next(param_grids_sample_iter), "id": id }
                     param_grids.append(param_grid_item)
                 except StopIteration:
                     pass
+                id += 1
 
-            for _ in range(self.n_iter):
+            for _ in range(n_iter):
                 dist_grid = rng.choice(param_grids)
                 # Always sort the keys of a dictionary, for reproducibility
                 params = dict(dist_grid["grid"][dist_grid["next"]])
-                items = sorted(dist.items())
-                for k, v in items:
-                    if hasattr(v, "rvs"):
-                        params[k] = v.rvs(random_state=rng)
                 params = dict(sorted(params.items()))
                 try:
                     dist_grid["next"] = next(dist_grid["sample"])
