@@ -321,7 +321,6 @@ class ParameterSampler:
                 )
                 n_iter = grid_size
             param_grids = []
-            id = 0
             for dist in self.param_distributions:
                 grid = ParameterGrid(dist)
                 sample = sample_without_replacement(
