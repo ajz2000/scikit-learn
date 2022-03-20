@@ -1598,7 +1598,7 @@ class RandomizedSearchCV(BaseSearchCV):
     without_replacement: bool, default=True
         If ``True``, then sampling without replacement is used only if every
         distribution is provided as a list. If non-list distributions are
-        given, this parameter is ignored and sampling with replaced is used.
+        given, this parameter is ignored and sampling with replacement is used.
         If ``False``, then sampling with replacement is used,
         regardless of whether or not every value in each dict of
         param_distributions is a list.
