@@ -118,19 +118,19 @@ class BisectingKMeans(
             
             # Update cluster_centers_. Replace cluster center of max sse in
             # self.cluster_centers_ with new centers obtained from performing kmeans 2.
-            max_sse_cluster_idx = np.where(
+            max_sse_center_idx = np.where(
                 np.all(self.cluster_centers_ == selected_cluster["centers"], axis=1)
             )[0][0]
             # Remove old center
             self.cluster_centers_ = np.delete(
                 self.cluster_centers_,
-                max_sse_cluster_idx,
+                max_sse_center_idx,
                 axis=0
             )
             # Insert new center in place of old one
             self.cluster_centers_ = np.insert(
                 self.cluster_centers_,
-                max_sse_cluster_idx,
+                max_sse_center_idx,
                 kmeans_bisect.cluster_centers_,
                 axis=0
             )
@@ -138,9 +138,9 @@ class BisectingKMeans(
             # Update labels_. Replace labels of max sse in self.labels_ with
             # new labels obtained from performing kmeans 2. Update labels to
             # correspond to the indices of updated self.cluster_centers_
-            max_sse_labels_idxs = np.where(self.labels_ == max_sse_cluster_idx)[0]
+            max_sse_labels_idxs = np.where(self.labels_ == max_sse_center_idx)[0]
             self.labels_[max_sse_labels_idxs] = (kmeans_bisect.labels_
-                                                 + max_sse_cluster_idx)
+                                                 + max_sse_center_idx)
             
             self._n_features_out = self.cluster_centers_.shape[0]
 
