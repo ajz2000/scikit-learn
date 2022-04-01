@@ -1,5 +1,10 @@
+"""Bisecting K-means clustering."""
 
-from cProfile import label
+# Authors: Zining (Jenny) Yu <zi.yu@mail.utoronto.ca>
+#          Jingrun Long <jingrun.long@mail.utoronto.ca>
+#          Aidan Zorbas <aidan.zorbas@mail.utoronto.ca>
+#          Dawson Brown <dawson.brown@mail.utoronto.ca>
+
 import numpy as np
 import scipy.sparse as sp
 from ..base import (
@@ -14,6 +19,7 @@ from ..utils.validation import _check_sample_weight
 from ._kmeans import KMeans
 from ._k_means_common import _inertia_dense
 from ._k_means_common import _inertia_sparse
+
 
 class BisectingKMeans(
     _ClassNamePrefixFeaturesOutMixin, TransformerMixin, ClusterMixin, BaseEstimator
@@ -43,7 +49,7 @@ class BisectingKMeans(
             max_iter=max_iter,
             tol=tol,
             verbose=verbose,
-            random_state = self.random_state,
+            random_state=self.random_state,
             copy_x=copy_x,
             algorithm=algorithm
             )
@@ -79,9 +85,13 @@ class BisectingKMeans(
         kmeans_bisect = self.kmeans.fit(X)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
 
-        # Keep track of all clusters. Update after each split. Pick out cluster with highest SSE for splitting.
+        # Keep track of all clusters. Update after each split.
+        # Pick out cluster with highest SSE for splitting.
         all_clusters = self._split_cluster_points(
-            X, sample_weight=sample_weight, centers=kmeans_bisect.cluster_centers_, labels=kmeans_bisect.labels_)
+            X,
+            sample_weight=sample_weight,
+            centers=kmeans_bisect.cluster_centers_,
+            labels=kmeans_bisect.labels_)
         
         self.cluster_centers_ = kmeans_bisect.cluster_centers_
         self._n_features_out = kmeans_bisect.cluster_centers_.shape[0]
@@ -93,9 +103,10 @@ class BisectingKMeans(
             selected_cluster = all_clusters[max_sse_idx]
 
             # Performs kmeans (k=2), on the selected cluster.
-            # Replace the old cluster (selected_cluster) with the clusters obtained
-            # from kmeans 2. This way, we keep track of all clusters. Both the ones
-            # obtained from splitting, and the old ones that didn't qualify for splitting.
+            # Replace the old cluster (selected_cluster) with the clusters
+            # obtained from kmeans 2. This way, we keep track of all
+            # clusters. Both the ones obtained from splitting, and the old
+            # ones that didn't qualify for splitting.
             kmeans_bisect = self.kmeans.fit(selected_cluster["X"])
             all_clusters[max_sse_idx:max_sse_idx] = self._split_cluster_points(
                 selected_cluster["X"],
@@ -104,19 +115,27 @@ class BisectingKMeans(
                 labels=kmeans_bisect.labels_
             )
             
-            # Update cluster_centers_. Replace cluster center of max sse in self.cluster_centers_
-            # with new centers obtained from performing kmeans 2.
+            # Update cluster_centers_. Replace cluster center of max sse in
+            # self.cluster_centers_ with new centers obtained from performing kmeans 2.
             max_sse_cluster_idx = np.where(
                 np.all(self.cluster_centers_ == selected_cluster["centers"], axis=1))[0][0]
             # Remove old center
-            self.cluster_centers_ = np.delete(self.cluster_centers_, max_sse_cluster_idx, axis=0)
+            self.cluster_centers_ = np.delete(
+              self.cluster_centers_,
+              max_sse_cluster_idx,
+              axis=0
+            )
             # Insert new center in place of old one
             self.cluster_centers_ = np.insert(
-                self.cluster_centers_, max_sse_cluster_idx, kmeans_bisect.cluster_centers_, axis=0)
+                self.cluster_centers_,
+                max_sse_cluster_idx,
+                kmeans_bisect.cluster_centers_,
+                axis=0
+            )
 
-            # Update labels_. Replace labels of max sse in self.labels_ with new labels
-            # obtained from performing kmeans 2.
-            # Update labels to correspond to the indices of updated self.cluster_centers_
+            # Update labels_. Replace labels of max sse in self.labels_ with
+            # new labels obtained from performing kmeans 2. Update labels to
+            # correspond to the indices of updated self.cluster_centers_
             max_sse_labels_idxs = np.where(self.labels_ == max_sse_cluster_idx)[0]
             self.labels_[max_sse_labels_idxs] = kmeans_bisect.labels_ + max_sse_cluster_idx
             
@@ -155,17 +174,24 @@ class BisectingKMeans(
         """
         split_clusters = []
         for i in np.unique(labels):
-            cluster_data={}
-            cluster_data["X"] = np.array(X[labels == i], dtype=np.float64) # Had to specify dtype, otherwise _inertia gives error.
+            cluster_data = {}
+            # Have to specify dtype, otherwise _inertia gives error.
+            cluster_data["X"] = np.array(X[labels == i], dtype=np.float64)
             cluster_data["sample_weight"] = sample_weight[labels == i]
-            cluster_data["centers"] = np.reshape(centers[i], (1, -1)) # Reshape 1D array to 2D: (1, 1).
-            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], i) # Every datapoint in X is labeled current label.
+            # Reshape 1D array to 2D: (1, 1).
+            cluster_data["centers"] = np.reshape(centers[i], (1, -1))
+            # Every datapoint in X is labeled current label.
+            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], i)
             if sp.issparse(cluster_data["X"]):
                 _inertia = _inertia_sparse
             else:
                 _inertia = _inertia_dense
-            cluster_data["inertia"] = _inertia(cluster_data["X"], cluster_data["sample_weight"], cluster_data["centers"], cluster_data["labels"], self._n_threads)
+            cluster_data["inertia"] = _inertia(
+              cluster_data["X"],
+              cluster_data["sample_weight"],
+              cluster_data["centers"],
+              cluster_data["labels"],
+              self._n_threads
+            )
             split_clusters.append(cluster_data)
         return split_clusters
-
-        
