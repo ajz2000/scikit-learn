@@ -1,10 +1,5 @@
-"""Bisecting K-means clustering."""
 
-# Authors: Zining (Jenny) Yu <zi.yu@mail.utoronto.ca>
-#          Jingrun Long <jingrun.long@mail.utoronto.ca>
-#          Aidan Zorbas <aidan.zorbas@mail.utoronto.ca>
-#          Dawson Brown <dawson.brown@mail.utoronto.ca>
-
+from cProfile import label
 import numpy as np
 import scipy.sparse as sp
 from ..base import (
@@ -14,12 +9,13 @@ from ..base import (
     TransformerMixin
 )
 
+from ..metrics.pairwise import euclidean_distances
 from ..utils._openmp_helpers import _openmp_effective_n_threads
+from ..utils.extmath import row_norms
 from ..utils.validation import _check_sample_weight
-from ._kmeans import KMeans
+from ._kmeans import KMeans, check_is_fitted, _labels_inertia_threadpool_limit
 from ._k_means_common import _inertia_dense
 from ._k_means_common import _inertia_sparse
-
 
 class BisectingKMeans(
     _ClassNamePrefixFeaturesOutMixin, TransformerMixin, ClusterMixin, BaseEstimator
@@ -49,7 +45,7 @@ class BisectingKMeans(
             max_iter=max_iter,
             tol=tol,
             verbose=verbose,
-            random_state=self.random_state,
+            random_state = self.random_state,
             copy_x=copy_x,
             algorithm=algorithm
         )
@@ -85,8 +81,7 @@ class BisectingKMeans(
         kmeans_bisect = self.kmeans.fit(X)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
 
-        # Keep track of all clusters. Update after each split.
-        # Pick out cluster with highest SSE for splitting.
+        # Keep track of all clusters. Update after each split. Pick out cluster with highest SSE for splitting.
         all_clusters = self._split_cluster_points(
             X,
             sample_weight=sample_weight,
@@ -104,10 +99,9 @@ class BisectingKMeans(
             selected_cluster = all_clusters[max_sse_idx]
 
             # Performs kmeans (k=2), on the selected cluster.
-            # Replace the old cluster (selected_cluster) with the clusters
-            # obtained from kmeans 2. This way, we keep track of all
-            # clusters. Both the ones obtained from splitting, and the old
-            # ones that didn't qualify for splitting.
+            # Replace the old cluster (selected_cluster) with the clusters obtained
+            # from kmeans 2. This way, we keep track of all clusters. Both the ones
+            # obtained from splitting, and the old ones that didn't qualify for splitting.
             kmeans_bisect = self.kmeans.fit(selected_cluster["X"])
             all_clusters[max_sse_idx:max_sse_idx] = self._split_cluster_points(
                 selected_cluster["X"],
@@ -146,26 +140,33 @@ class BisectingKMeans(
 
         return self
 
-    def fit_predict(X, y=None, sample_weight=None):
+    def fit_predict(self, X, y=None, sample_weight=None):
         pass
 
-    def fit_transform(X, y=None, sample_weight=None):
-        pass
-    
-    def get_params(deep=True):
+    def fit_transform(self, X, y=None, sample_weight=None):
         pass
 
-    def set_params(**params):
+    def score(self, X, y=None, sample_weight=None):
         pass
 
-    def score(X, y=None, sample_weight=None):
-        pass
+    def transform(self, X):
+        check_is_fitted(self)
 
-    def transform(X):
-        pass
+        X = self._check_test_data(X)
+        return self._transform(X)
 
-    def predict(X, sample_weight=None):
-        pass
+    def _transform(self, X):
+        return euclidean_distances(X, self.cluster_centers_)
+
+    def predict(self, X, sample_weight=None):
+        check_is_fitted(self)
+
+        x_squared_norms = row_norms(X, squared=True)
+        sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
+
+        return _labels_inertia_threadpool_limit(
+            X, sample_weight, x_squared_norms, self.cluster_centers_, self._n_threads
+        )[0]
 
     def _split_cluster_points(self, X, sample_weight, centers, labels):
         """
@@ -177,14 +178,11 @@ class BisectingKMeans(
         """
         split_clusters = []
         for i in np.unique(labels):
-            cluster_data = {}
-            # Have to specify dtype, otherwise _inertia gives error.
-            cluster_data["X"] = np.array(X[labels == i], dtype=np.float64)
+            cluster_data={}
+            cluster_data["X"] = np.array(X[labels == i], dtype=np.float64) # Had to specify dtype, otherwise _inertia gives error.
             cluster_data["sample_weight"] = sample_weight[labels == i]
-            # Reshape 1D array to 2D: (1, 1).
-            cluster_data["centers"] = np.reshape(centers[i], (1, -1))
-            # Every datapoint in X is labeled current label.
-            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], i)
+            cluster_data["centers"] = np.reshape(centers[i], (1, -1)) # Reshape 1D array to 2D: (1, 1).
+            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], i) # Every datapoint in X is labeled current label.
             if sp.issparse(cluster_data["X"]):
                 _inertia = _inertia_sparse
             else:
@@ -198,3 +196,14 @@ class BisectingKMeans(
             )
             split_clusters.append(cluster_data)
         return split_clusters
+
+    def _check_test_data(self, X):
+        X = self._validate_data(
+            X,
+            accept_sparse="csr",
+            reset=False,
+            dtype=[np.float64, np.float32],
+            order="C",
+            accept_large_sparse=False,
+        )
+        return X
