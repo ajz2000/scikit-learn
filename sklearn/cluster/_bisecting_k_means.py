@@ -79,7 +79,8 @@ class BisectingKMeans(
         kmeans_bisect = self.kmeans.fit(X)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
 
-        bisected_clusters = self._split_cluster_points(
+        # Keep track of all clusters. Update after each split. Pick out cluster with highest SSE for splitting.
+        all_clusters = self._split_cluster_points(
             X, sample_weight=sample_weight, centers=kmeans_bisect.cluster_centers_, labels=kmeans_bisect.labels_)
         
         self.cluster_centers_ = kmeans_bisect.cluster_centers_
@@ -87,28 +88,37 @@ class BisectingKMeans(
         self.labels_ = kmeans_bisect.labels_
 
         while self.cluster_centers_.shape[0] < self.n_clusters:
-            #print("Iter")
-            #print(self.cluster_centers_)
-            #print(self.labels_)
-            cluster_1 = bisected_clusters[0]
-            cluster_2 = bisected_clusters[1]
+            # Select cluster with highest SSE
+            max_sse_idx = np.argmax([c["inertia"] for c in all_clusters])
+            selected_cluster = all_clusters[max_sse_idx]
 
-            # Selects cluster with the larger SSE (sum of squared errors).
-            larger_inertia = np.maximum(cluster_1["inertia"], cluster_2["inertia"])
-            selected_cluster = cluster_1 if cluster_1["inertia"] == larger_inertia else cluster_2
-            other_cluster = cluster_1 if cluster_1["inertia"] != larger_inertia else cluster_2
-
-            # Performs kmeans (k=2), on the larger cluster. Update current
-            # cluster centers and labels.
+            # Performs kmeans (k=2), on the selected cluster.
+            # Replace the old cluster (selected_cluster) with the clusters obtained
+            # from kmeans 2. This way, we keep track of all clusters. Both the ones
+            # obtained from splitting, and the old ones that didn't qualify for splitting.
             kmeans_bisect = self.kmeans.fit(selected_cluster["X"])
-            bisected_clusters = self._split_cluster_points(
-                selected_cluster["X"], sample_weight=selected_cluster["sample_weight"], centers=kmeans_bisect.cluster_centers_, labels=kmeans_bisect.labels_)
+            all_clusters[max_sse_idx:max_sse_idx] = self._split_cluster_points(
+                selected_cluster["X"],
+                sample_weight=selected_cluster["sample_weight"],
+                centers=kmeans_bisect.cluster_centers_,
+                labels=kmeans_bisect.labels_
+            )
             
-            # My biggest concern: updating current cluster_centers_ and labels_
-            # after each cluster split. I haven't tested for this yet, please do!
-            # DO NOT mess up order of assigning each row in X to each cluster center.
-            self.cluster_centers_ = np.vstack((kmeans_bisect.cluster_centers_, other_cluster["centers"]))
-            self.labels_ = np.hstack((kmeans_bisect.labels_ + 1, other_cluster["labels"]))
+            # Update cluster_centers_. Replace cluster center of max sse in self.cluster_centers_
+            # with new centers obtained from performing kmeans 2.
+            max_sse_cluster_idx = np.where(
+                np.all(self.cluster_centers_ == selected_cluster["centers"], axis=1))[0][0]
+            # Remove old center
+            self.cluster_centers_ = np.delete(self.cluster_centers_, max_sse_cluster_idx, axis=0)
+            # Insert new center in place of old one
+            self.cluster_centers_ = np.insert(
+                self.cluster_centers_, max_sse_cluster_idx, kmeans_bisect.cluster_centers_, axis=0)
+
+            # Update labels_. Replace labels of max sse in self.labels_ with new labels
+            # obtained from performing kmeans 2.
+            # Update labels to correspond to the indices of updated self.cluster_centers_
+            max_sse_labels_idxs = np.where(self.labels_ == max_sse_cluster_idx)[0]
+            self.labels_[max_sse_labels_idxs] = kmeans_bisect.labels_ + max_sse_cluster_idx
             
             self._n_features_out = self.cluster_centers_.shape[0]
 
