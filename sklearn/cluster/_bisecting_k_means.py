@@ -52,7 +52,7 @@ class BisectingKMeans(
             random_state=self.random_state,
             copy_x=copy_x,
             algorithm=algorithm
-            )
+        )
         self._n_threads = _openmp_effective_n_threads()
         self.max_iter = max_iter
         pass
@@ -91,7 +91,8 @@ class BisectingKMeans(
             X,
             sample_weight=sample_weight,
             centers=kmeans_bisect.cluster_centers_,
-            labels=kmeans_bisect.labels_)
+            labels=kmeans_bisect.labels_
+        )
         
         self.cluster_centers_ = kmeans_bisect.cluster_centers_
         self._n_features_out = kmeans_bisect.cluster_centers_.shape[0]
@@ -118,12 +119,13 @@ class BisectingKMeans(
             # Update cluster_centers_. Replace cluster center of max sse in
             # self.cluster_centers_ with new centers obtained from performing kmeans 2.
             max_sse_cluster_idx = np.where(
-                np.all(self.cluster_centers_ == selected_cluster["centers"], axis=1))[0][0]
+                np.all(self.cluster_centers_ == selected_cluster["centers"], axis=1)
+            )[0][0]
             # Remove old center
             self.cluster_centers_ = np.delete(
-              self.cluster_centers_,
-              max_sse_cluster_idx,
-              axis=0
+                self.cluster_centers_,
+                max_sse_cluster_idx,
+                axis=0
             )
             # Insert new center in place of old one
             self.cluster_centers_ = np.insert(
@@ -137,7 +139,8 @@ class BisectingKMeans(
             # new labels obtained from performing kmeans 2. Update labels to
             # correspond to the indices of updated self.cluster_centers_
             max_sse_labels_idxs = np.where(self.labels_ == max_sse_cluster_idx)[0]
-            self.labels_[max_sse_labels_idxs] = kmeans_bisect.labels_ + max_sse_cluster_idx
+            self.labels_[max_sse_labels_idxs] = (kmeans_bisect.labels_
+                                                 + max_sse_cluster_idx)
             
             self._n_features_out = self.cluster_centers_.shape[0]
 
@@ -187,11 +190,11 @@ class BisectingKMeans(
             else:
                 _inertia = _inertia_dense
             cluster_data["inertia"] = _inertia(
-              cluster_data["X"],
-              cluster_data["sample_weight"],
-              cluster_data["centers"],
-              cluster_data["labels"],
-              self._n_threads
+                cluster_data["X"],
+                cluster_data["sample_weight"],
+                cluster_data["centers"],
+                cluster_data["labels"],
+                self._n_threads
             )
             split_clusters.append(cluster_data)
         return split_clusters
