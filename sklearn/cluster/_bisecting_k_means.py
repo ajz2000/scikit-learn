@@ -12,7 +12,7 @@ from ..base import (
 from ..metrics.pairwise import euclidean_distances
 from ..utils._openmp_helpers import _openmp_effective_n_threads
 from ..utils.extmath import row_norms
-from ..utils.validation import _check_sample_weight
+from ..utils.validation import _check_sample_weight, check_is_fitted, check_random_state
 from ._kmeans import KMeans, check_is_fitted, _labels_inertia_threadpool_limit
 from ._k_means_common import _inertia_dense
 from ._k_means_common import _inertia_sparse
@@ -77,6 +77,20 @@ class BisectingKMeans(
         self: object
             Fitted estimator.
         """
+        # Data validation
+        X = self._validate_data(
+            X,
+            accept_sparse="csr",
+            dtype=[np.float64, np.float32],
+            order="C",
+            copy=self.copy_x,
+            accept_large_sparse=False,
+        )
+
+        self._check_params(X)
+        random_state = check_random_state(self.random_state)
+        sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
+
         # Initial split of data.
         kmeans_bisect = self.kmeans.fit(X)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
