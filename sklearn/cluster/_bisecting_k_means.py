@@ -217,7 +217,7 @@ class BisectingKMeans(
             # Reshape 1D array to 2D: (1, 1).
             cluster_data["centers"] = np.reshape(centers[i], (1, -1))
             # Every datapoint in X is labeled current label.
-            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], 0)
+            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], 0, dtype=np.int32)
             if sp.issparse(cluster_data["X"]):
                 _inertia = _inertia_sparse
             else:
