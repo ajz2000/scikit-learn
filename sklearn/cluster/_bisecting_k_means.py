@@ -45,6 +45,7 @@ class BisectingKMeans(
         self.n_split = 2
         self.n_clusters = n_clusters
         self.random_state = random_state
+        self.copy_x = copy_x
         self.kmeans = KMeans(
             n_clusters=self.n_split,
             init=init,
@@ -90,6 +91,7 @@ class BisectingKMeans(
            accept_sparse="csr",
            dtype=[np.float64, np.float32],
            order="C",
+           copy=self.copy_x,
            accept_large_sparse=False,
         )
 
