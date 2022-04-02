@@ -78,16 +78,15 @@ class BisectingKMeans(
             Fitted estimator.
         """
         # Data validation
-        X = self._validate_data(
-            X,
-            accept_sparse="csr",
-            dtype=[np.float64, np.float32],
-            order="C",
-            copy=self.copy_x,
-            accept_large_sparse=False,
-        )
+        #X = self._validate_data(
+        #    X,
+        #    accept_sparse="csr",
+        #    dtype=[np.float64, np.float32],
+        #    order="C",
+        #    copy=self.copy_x,
+        #    accept_large_sparse=False,
+        #)
 
-        self._check_params(X)
         random_state = check_random_state(self.random_state)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
 
@@ -117,12 +116,12 @@ class BisectingKMeans(
             # from kmeans 2. This way, we keep track of all clusters. Both the ones
             # obtained from splitting, and the old ones that didn't qualify for splitting.
             kmeans_bisect = self.kmeans.fit(selected_cluster["X"])
-            all_clusters[max_sse_idx:max_sse_idx] = self._split_cluster_points(
+            all_clusters = all_clusters[:max_sse_idx] + self._split_cluster_points(
                 selected_cluster["X"],
                 sample_weight=selected_cluster["sample_weight"],
                 centers=kmeans_bisect.cluster_centers_,
                 labels=kmeans_bisect.labels_
-            )
+            ) + all_clusters[max_sse_idx+1:]
             
             # Update cluster_centers_. Replace cluster center of max sse in
             # self.cluster_centers_ with new centers obtained from performing kmeans 2.
@@ -146,6 +145,9 @@ class BisectingKMeans(
             # Update labels_. Replace labels of max sse in self.labels_ with
             # new labels obtained from performing kmeans 2. Update labels to
             # correspond to the indices of updated self.cluster_centers_
+            # [1, 2, 2, 3, 3, 4, 4, 5]
+            idx_to_change = np.where(self.labels_ > max_sse_center_idx)[0]
+            self.labels_[idx_to_change] = self.labels_[idx_to_change] + 1
             max_sse_labels_idxs = np.where(self.labels_ == max_sse_center_idx)[0]
             self.labels_[max_sse_labels_idxs] = (kmeans_bisect.labels_
                                                  + max_sse_center_idx)
@@ -196,7 +198,7 @@ class BisectingKMeans(
             cluster_data["X"] = np.array(X[labels == i], dtype=np.float64) # Had to specify dtype, otherwise _inertia gives error.
             cluster_data["sample_weight"] = sample_weight[labels == i]
             cluster_data["centers"] = np.reshape(centers[i], (1, -1)) # Reshape 1D array to 2D: (1, 1).
-            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], i) # Every datapoint in X is labeled current label.
+            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], 0) # Every datapoint in X is labeled current label.
             if sp.issparse(cluster_data["X"]):
                 _inertia = _inertia_sparse
             else:
