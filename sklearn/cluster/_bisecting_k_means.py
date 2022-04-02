@@ -157,13 +157,21 @@ class BisectingKMeans(
         return self
 
     def fit_predict(self, X, y=None, sample_weight=None):
-        pass
+        return self.fit(X, sample_weight=sample_weight).labels_
 
     def fit_transform(self, X, y=None, sample_weight=None):
-        pass
+        return self.fit(X, sample_weight=sample_weight)._transform(X)
 
     def score(self, X, y=None, sample_weight=None):
-        pass
+        check_is_fitted(self)
+
+        X = self._check_test_data(X)
+        x_squared_norms = row_norms(X, squared=True)
+        sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
+
+        return -_labels_inertia_threadpool_limit(
+            X, sample_weight, x_squared_norms, self.cluster_centers_, self._n_threads
+        )[1]
 
     def transform(self, X):
         check_is_fitted(self)
