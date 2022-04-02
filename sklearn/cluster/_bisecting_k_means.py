@@ -1,5 +1,10 @@
+"""Bisecting K-means clustering."""
 
-from cProfile import label
+# Authors: Zining (Jenny) Yu <zi.yu@mail.utoronto.ca>
+#          Jingrun Long <jingrun.long@mail.utoronto.ca>
+#          Aidan Zorbas <aidan.zorbas@mail.utoronto.ca>
+#          Dawson Brown <dawson.brown@mail.utoronto.ca>
+
 import numpy as np
 import scipy.sparse as sp
 from ..base import (
@@ -16,6 +21,7 @@ from ..utils.validation import _check_sample_weight, check_is_fitted, check_rand
 from ._kmeans import KMeans, check_is_fitted, _labels_inertia_threadpool_limit
 from ._k_means_common import _inertia_dense
 from ._k_means_common import _inertia_sparse
+
 
 class BisectingKMeans(
     _ClassNamePrefixFeaturesOutMixin, TransformerMixin, ClusterMixin, BaseEstimator
@@ -45,7 +51,7 @@ class BisectingKMeans(
             max_iter=max_iter,
             tol=tol,
             verbose=verbose,
-            random_state = self.random_state,
+            random_state=self.random_state,
             copy_x=copy_x,
             algorithm=algorithm
         )
@@ -78,14 +84,14 @@ class BisectingKMeans(
             Fitted estimator.
         """
         # Data validation
-        #X = self._validate_data(
+        # X = self._validate_data(
         #    X,
         #    accept_sparse="csr",
         #    dtype=[np.float64, np.float32],
         #    order="C",
         #    copy=self.copy_x,
         #    accept_large_sparse=False,
-        #)
+        # )
 
         random_state = check_random_state(self.random_state)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
@@ -94,14 +100,15 @@ class BisectingKMeans(
         kmeans_bisect = self.kmeans.fit(X)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
 
-        # Keep track of all clusters. Update after each split. Pick out cluster with highest SSE for splitting.
+        # Keep track of all clusters. Update after each split. Pick out cluster
+        # with highest SSE for splitting.
         all_clusters = self._split_cluster_points(
             X,
             sample_weight=sample_weight,
             centers=kmeans_bisect.cluster_centers_,
             labels=kmeans_bisect.labels_
         )
-        
+
         self.cluster_centers_ = kmeans_bisect.cluster_centers_
         self._n_features_out = kmeans_bisect.cluster_centers_.shape[0]
         self.labels_ = kmeans_bisect.labels_
@@ -113,8 +120,9 @@ class BisectingKMeans(
 
             # Performs kmeans (k=2), on the selected cluster.
             # Replace the old cluster (selected_cluster) with the clusters obtained
-            # from kmeans 2. This way, we keep track of all clusters. Both the ones
-            # obtained from splitting, and the old ones that didn't qualify for splitting.
+            # from kmeans 2. This way, we keep track of all clusters, both the ones
+            # obtained from splitting and the old ones that didn't qualify
+            # for splitting.
             kmeans_bisect = self.kmeans.fit(selected_cluster["X"])
             all_clusters = all_clusters[:max_sse_idx] + self._split_cluster_points(
                 selected_cluster["X"],
@@ -122,7 +130,7 @@ class BisectingKMeans(
                 centers=kmeans_bisect.cluster_centers_,
                 labels=kmeans_bisect.labels_
             ) + all_clusters[max_sse_idx+1:]
-            
+
             # Update cluster_centers_. Replace cluster center of max sse in
             # self.cluster_centers_ with new centers obtained from performing kmeans 2.
             max_sse_center_idx = np.where(
@@ -151,7 +159,7 @@ class BisectingKMeans(
             max_sse_labels_idxs = np.where(self.labels_ == max_sse_center_idx)[0]
             self.labels_[max_sse_labels_idxs] = (kmeans_bisect.labels_
                                                  + max_sse_center_idx)
-            
+
             self._n_features_out = self.cluster_centers_.shape[0]
 
         return self
@@ -202,11 +210,14 @@ class BisectingKMeans(
         """
         split_clusters = []
         for i in np.unique(labels):
-            cluster_data={}
-            cluster_data["X"] = np.array(X[labels == i], dtype=np.float64) # Had to specify dtype, otherwise _inertia gives error.
+            cluster_data = {}
+            # Have to specify dtype, otherwise _inertia gives error.
+            cluster_data["X"] = np.array(X[labels == i], dtype=np.float64)
             cluster_data["sample_weight"] = sample_weight[labels == i]
-            cluster_data["centers"] = np.reshape(centers[i], (1, -1)) # Reshape 1D array to 2D: (1, 1).
-            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], 0) # Every datapoint in X is labeled current label.
+            # Reshape 1D array to 2D: (1, 1).
+            cluster_data["centers"] = np.reshape(centers[i], (1, -1))
+            # Every datapoint in X is labeled current label.
+            cluster_data["labels"] = np.full(cluster_data["X"].shape[0], 0)
             if sp.issparse(cluster_data["X"]):
                 _inertia = _inertia_sparse
             else:
