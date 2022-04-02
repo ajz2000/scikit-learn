@@ -4,6 +4,8 @@
 #          Jingrun Long <jingrun.long@mail.utoronto.ca>
 #          Aidan Zorbas <aidan.zorbas@mail.utoronto.ca>
 #          Dawson Brown <dawson.brown@mail.utoronto.ca>
+#          Kara Autumn Jiang <autumn.jiang@mail.utoronto.ca>
+#          Vanessa Pierre <vanessa.pierre@mail.utoronto.ca>
 
 import numpy as np
 import scipy.sparse as sp
@@ -40,7 +42,6 @@ class BisectingKMeans(
         copy_x=True,
         algorithm="lloyd",
     ):
-
         self.n_split = 2
         self.n_clusters = n_clusters
         self.random_state = random_state
@@ -57,7 +58,7 @@ class BisectingKMeans(
         )
         self._n_threads = _openmp_effective_n_threads()
         self.max_iter = max_iter
-        pass
+
 
     def fit(self, X, y=None, sample_weight=None):
         """Compute bisecting k-means.
@@ -83,15 +84,14 @@ class BisectingKMeans(
         self: object
             Fitted estimator.
         """
-        # Data validation
-        # X = self._validate_data(
-        #    X,
-        #    accept_sparse="csr",
-        #    dtype=[np.float64, np.float32],
-        #    order="C",
-        #    copy=self.copy_x,
-        #    accept_large_sparse=False,
-        # )
+        # Data validation -- sets n_features_in
+        X = self._validate_data(
+           X,
+           accept_sparse="csr",
+           dtype=[np.float64, np.float32],
+           order="C",
+           accept_large_sparse=False,
+        )
 
         random_state = check_random_state(self.random_state)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
