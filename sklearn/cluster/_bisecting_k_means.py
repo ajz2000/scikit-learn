@@ -19,7 +19,7 @@ from ..base import (
 from ..metrics.pairwise import euclidean_distances
 from ..utils._openmp_helpers import _openmp_effective_n_threads
 from ..utils.extmath import row_norms
-from ..utils.validation import _check_sample_weight, check_is_fitted, check_random_state
+from ..utils.validation import _check_sample_weight, check_is_fitted
 from ._kmeans import KMeans, check_is_fitted, _labels_inertia_threadpool_limit
 from ._k_means_common import _inertia_dense
 from ._k_means_common import _inertia_sparse
@@ -28,6 +28,93 @@ from ._k_means_common import _inertia_sparse
 class BisectingKMeans(
     _ClassNamePrefixFeaturesOutMixin, TransformerMixin, ClusterMixin, BaseEstimator
 ):
+    """Bisecting K-Means clustering.
+
+    Parameters
+    ----------
+
+    n_clusters : int, default=8
+        The number of clusters to form. Equivalent to the number of bisection steps - 1.
+
+    init : {'k-means++', 'random'}, callable or array-like of shape \
+            (n_clusters, n_features), default='k-means++'
+        Method for initialization of the internal K-Means algorithm. This has no effect on the bisection step.
+        Options:
+
+        'k-means++' : selects initial cluster centers for k-mean
+        clustering in a smart way to speed up convergence. See section notes in k_init for details.
+
+        'random': choose `n_clusters` observations (rows) at random from data
+        for the initial centroids.
+
+        If an array is passed, it should be of shape (n_clusters, n_features)
+        and gives the initial centers.
+
+        If a callable is passed, it should take arguments X, n_clusters and a
+        random state and return an initialization.
+
+    n_init : int, default=10
+        Number of time the internal K-Means algorithm will be run with different
+        centroid seeds. The final results will be the best output of
+        n_init consecutive runs in terms of inertia. This has no effect on the bisection step.
+
+    max_iter : int, default=300
+        Maximum number of iterations of the internal K-Means algorithm for a given
+        bisection step.
+
+    tol : float, default=1e-4
+        Relative tolerance with regards to Frobenius norm of the difference
+        in the cluster centers of two consecutive iterations to declare
+        convergence for the internal K-means algorithm. This has no effect on the bisection step.
+
+    verbose : int, default=0
+        Verbosity mode.
+
+    random_state : int, RandomState instance or None, default=None
+        Determines random number generation for centroid initialization on the internal K-Means
+        algorithm. This has no effect on the bisection step. Use
+        an int to make the randomness deterministic.
+        See :term:`Glossary <random_state>`.
+
+    copy_x : bool, default=True
+        When pre-computing distances in the internal K-Means algorithm it is more 
+        numerically accurate to center the data first. If copy_x is True (default), 
+        then the original data is not modified. If False, the original data is modified, 
+        and put back before the function returns, but small numerical differences may be
+        introduced by subtracting and then adding the data mean. Note that if
+        the original data is not C-contiguous, a copy will be made even if
+        copy_x is False. If the original data is sparse, but not in CSR format,
+        a copy will be made even if copy_x is False. Note this will also copy
+        the array during the operations of the bisection step to avoid side effects
+        which may arise from calculations (the array's shape will always remain the
+        same, however).
+
+    algorithm : {"lloyd", "elkan", "auto", "full"}, default="lloyd"
+        K-Means algorithm to use for the internal K-Means. The classical EM-style algorithm is `"lloyd"`.
+        The `"elkan"` variation can be more efficient on some datasets with
+        well-defined clusters, by using the triangle inequality. However it's
+        more memory intensive due to the allocation of an extra array of shape at most
+        `(n_samples, n_clusters)`. Note the extra array is re-allocated at each bisection step,
+        however due to the nature of the algorithm it's size is always non-increasing.
+
+        `"auto"` and `"full"` are deprecated and they will be removed in
+        Scikit-Learn 1.3. They are both aliases for `"lloyd"`.
+
+    Attributes
+    ----------
+    cluster_centers_ : ndarray of shape (n_clusters, n_features)
+        Coordinates of cluster centers.
+
+    labels_ : ndarray of shape (n_samples,)
+        Labels of each point
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : ndarray of shape (`n_features_in_`,)
+        Names of features seen during :term:`fit`. Defined only when `X`
+        has feature names that are all strings.
+    """
 
     def __init__(
         self,
@@ -95,7 +182,6 @@ class BisectingKMeans(
            accept_large_sparse=False,
         )
 
-        random_state = check_random_state(self.random_state)
         sample_weight = _check_sample_weight(sample_weight, X, dtype=X.dtype)
 
         # Initial split of data.
@@ -167,12 +253,76 @@ class BisectingKMeans(
         return self
 
     def fit_predict(self, X, y=None, sample_weight=None):
+        """Compute cluster centers and predict cluster index for each sample using
+        bisecting K-Means.
+
+        Convenience method; equivalent to calling fit(X) followed by
+        predict(X).
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            New data to transform.
+
+        y : Ignored
+            Not used, present here for API consistency by convention.
+
+        sample_weight : array-like of shape (n_samples,), default=None
+            The weights for each observation in X. If None, all observations
+            are assigned equal weight.
+
+        Returns
+        -------
+        labels : ndarray of shape (n_samples,)
+            Index of the cluster each sample belongs to.
+        """
         return self.fit(X, sample_weight=sample_weight).labels_
 
     def fit_transform(self, X, y=None, sample_weight=None):
+        """Compute clustering by KMeans and transform X to cluster-distance space (see 
+        tranform for a description of this space).
+
+        Equivalent to fit(X).transform(X), but more efficiently implemented.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Data to fit on, then transform.
+
+        y : Ignored
+            Not used, present here for API consistency by convention.
+
+        sample_weight : array-like of shape (n_samples,), default=None
+            The weights for each observation in X. If None, all observations
+            are assigned equal weight.
+
+        Returns
+        -------
+        X_new : ndarray of shape (n_samples, n_clusters)
+            X transformed in cluster-distance space.
+        """
         return self.fit(X, sample_weight=sample_weight)._transform(X)
 
     def score(self, X, y=None, sample_weight=None):
+        """Opposite(Negative) of the value of X on the K-means objective.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            New data to score.
+
+        y : Ignored
+            Not used, present here for API consistency by convention.
+
+        sample_weight : array-like of shape (n_samples,), default=None
+            The weights for each observation in X. If None, all observations
+            are assigned equal weight.
+
+        Returns
+        -------
+        score : float
+            Opposite(Negative) of the value of X on the Bisecting K-means objective.
+        """
         check_is_fitted(self)
 
         X = self._check_test_data(X)
@@ -184,15 +334,48 @@ class BisectingKMeans(
         )[1]
 
     def transform(self, X):
+        """Transform X to a cluster-distance space.
+
+        In the new space, each dimension is the distance to the cluster
+        centers. Note that even if X is sparse, the array returned by
+        `transform` will typically be dense.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            New data to transform.
+
+        Returns
+        -------
+        X_new : ndarray of shape (n_samples, n_clusters)
+            X transformed in the new space.
+        """
         check_is_fitted(self)
 
         X = self._check_test_data(X)
         return self._transform(X)
 
     def _transform(self, X):
+        """Primary functionality of the transform method; run without input validation."""
         return euclidean_distances(X, self.cluster_centers_)
 
     def predict(self, X, sample_weight=None):
+        """Predict the closest cluster each sample in X belongs to.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            New data to predict.
+
+        sample_weight : array-like of shape (n_samples,), default=None
+            The weights for each observation in X. If None, all observations
+            are assigned equal weight.
+
+        Returns
+        -------
+        labels : ndarray of shape (n_samples,)
+            Labels of the cluster each sample belongs to.
+        """
         check_is_fitted(self)
 
         x_squared_norms = row_norms(X, squared=True)
@@ -203,12 +386,46 @@ class BisectingKMeans(
         )[0]
 
     def _split_cluster_points(self, X, sample_weight, centers, labels):
-        """
+        """Separate X into several objects, each of which describes a different cluster in X.
+        
+        Parameters
+        ----------
+
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Data to separate.
+
+        sample_weight : array-like of shape (n_samples,), default=None
+            The weights for each observation in X. If None, all observations
+            are assigned equal weight.
+        
+        centers : array-like of shape (n_labels,)
+            The centers for each label in X. It is assumed the label matches the cluster's index.
+        
+        labels : ndarray of shape (n_samples,)
+            Labels of the cluster each sample belongs to.
+
         Returns
         -------
-        split X with numpy, call _inertia_dense
-        split X manually (for i in range), calculating inertia as we go
-        (unique lables + 1) * n
+
+        split_clusters : list of dict
+            Split data and information. Each dictionary contains the following attributes:
+
+            X : {array-like, sparse matrix} of shape (n_samples_in_cluster, n_features)
+                All data from X corresponding to the cluster of the dictionary.
+            
+            sample_weight : array-like of shape (n_samples_in_label,), default=None
+                The weights for each observation in X corresponsing to this particular cluster.
+            
+            centers : array-like of shape (1, n_features)
+                The center of this cluster.
+            
+            labels : ndarray of shape (n_samples,)
+                Array of all zeros, as there is only one cluster in this dataset. 
+                This array can be used when calculating inertia to ensure it identifies
+                the points properly.
+            
+            inertia : float
+                Sum of squared distances of all data in this cluster to the center of the cluster.
         """
         split_clusters = []
         for i in np.unique(labels):
@@ -218,7 +435,7 @@ class BisectingKMeans(
             cluster_data["sample_weight"] = sample_weight[labels == i]
             # Reshape 1D array to 2D: (1, 1).
             cluster_data["centers"] = np.reshape(centers[i], (1, -1))
-            # Every datapoint in X is labeled current label.
+            # Every datapoint in X is labeled 0.
             cluster_data["labels"] = np.full(cluster_data["X"].shape[0], 0, dtype=np.int32)
             if sp.issparse(cluster_data["X"]):
                 _inertia = _inertia_sparse
