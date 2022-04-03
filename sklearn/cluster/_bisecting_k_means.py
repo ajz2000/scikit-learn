@@ -107,6 +107,10 @@ class BisectingKMeans(
 
     labels_ : ndarray of shape (n_samples,)
         Labels of each point
+    
+    inertia_ : float
+        Sum of squared distances of samples to their assigned cluster center,
+        weighted by the sample weights if provided.
 
     n_features_in_ : int
         Number of features seen during :term:`fit`.
@@ -249,6 +253,8 @@ class BisectingKMeans(
                                                  + max_sse_center_idx)
 
             self._n_features_out = self.cluster_centers_.shape[0]
+        
+        self.inertia_ = np.sum([c["inertia"] for c in all_clusters])
 
         return self
 
