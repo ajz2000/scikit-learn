@@ -9,6 +9,8 @@
 
 import numpy as np
 import scipy.sparse as sp
+import warnings
+
 from ..base import (
     _ClassNamePrefixFeaturesOutMixin,
     BaseEstimator,
@@ -36,8 +38,7 @@ class BisectingKMeans(
     n_clusters : int, default=8
         The number of clusters to form. Equivalent to the number of bisection steps - 1.
 
-    init : {'k-means++', 'random'}, callable or array-like of shape \
-            (n_clusters, n_features), default='k-means++'
+    init : {'k-means++', 'random'}, default='k-means++'
         Method for initialization of the internal K-Means algorithm. This has no effect on the bisection step.
         Options:
 
@@ -46,12 +47,6 @@ class BisectingKMeans(
 
         'random': choose `n_clusters` observations (rows) at random from data
         for the initial centroids.
-
-        If an array is passed, it should be of shape (n_clusters, n_features)
-        and gives the initial centers.
-
-        If a callable is passed, it should take arguments X, n_clusters and a
-        random state and return an initialization.
 
     n_init : int, default=10
         Number of time the internal K-Means algorithm will be run with different
@@ -135,8 +130,14 @@ class BisectingKMeans(
     ):
         self.n_split = 2
         self.n_clusters = n_clusters
+        self.init = init
+        self.n_init = n_init
+        self.max_iter = max_iter
+        self.tol = tol
+        self.verbose = verbose
         self.random_state = random_state
         self.copy_x = copy_x
+        self.algorithm = algorithm
         self.kmeans = KMeans(
             n_clusters=self.n_split,
             init=init,
@@ -176,6 +177,9 @@ class BisectingKMeans(
         self: object
             Fitted estimator.
         """
+        # Check parameters
+        self._check_params(X)
+
         # Data validation -- sets n_features_in
         X = self._validate_data(
            X,
@@ -390,6 +394,48 @@ class BisectingKMeans(
         return _labels_inertia_threadpool_limit(
             X, sample_weight, x_squared_norms, self.cluster_centers_, self._n_threads
         )[0]
+    
+    def _check_params(self, X):
+        if self.n_init <= 0:
+            raise ValueError(f"n_init should be > 0, got {self.n_init} instead.")
+        self._n_init = self.n_init
+
+        if self.max_iter <= 0:
+            raise ValueError(f"max_iter should be > 0, got {self.max_iter} instead.")
+
+        if X.shape[0] < self.n_clusters:
+            raise ValueError(
+                f"n_samples={X.shape[0]} should be >= n_clusters={self.n_clusters}."
+            )
+
+        if self.algorithm not in ("lloyd", "elkan", "auto", "full"):
+            raise ValueError(
+                "Algorithm must be either 'lloyd' or 'elkan', "
+                f"got {self.algorithm} instead."
+            )
+
+        self._algorithm = self.algorithm
+        if self._algorithm in ("auto", "full"):
+            warnings.warn(
+                f"algorithm='{self._algorithm}' is deprecated, it will be "
+                "removed in 1.3. Using 'lloyd' instead.",
+                FutureWarning,
+            )
+            self._algorithm = "lloyd"
+        if self._algorithm == "elkan" and self.n_clusters == 1:
+            warnings.warn(
+                "algorithm='elkan' doesn't make sense for a single "
+                "cluster. Using 'lloyd' instead.",
+                RuntimeWarning,
+            )
+            self._algorithm = "lloyd"
+
+        if not (isinstance(self.init, str) and self.init in ["k-means++", "random"]
+        ):
+            raise ValueError(
+                "init should be either 'k-means++', 'random', a ndarray or a "
+                f"callable, got '{self.init}' instead."
+            )
 
     def _split_cluster_points(self, X, sample_weight, centers, labels):
         """Separate X into several objects, each of which describes a different cluster in X.
