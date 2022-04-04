@@ -12,6 +12,7 @@ from ._agglomerative import (
     linkage_tree,
     FeatureAgglomeration,
 )
+from ._bisecting_k_means import BisectingKMeans
 from ._kmeans import k_means, KMeans, MiniBatchKMeans, kmeans_plusplus
 from ._dbscan import dbscan, DBSCAN
 from ._optics import (
@@ -27,6 +28,7 @@ __all__ = [
     "AffinityPropagation",
     "AgglomerativeClustering",
     "Birch",
+    "BisectingKMeans",
     "DBSCAN",
     "OPTICS",
     "cluster_optics_dbscan",
